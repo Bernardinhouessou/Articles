@@ -1,0 +1,660 @@
+// -- DECLARATIVE PIPELINE
+import hudson.tasks.test.AbstractTestResultAction
+import groovy.text.StreamingTemplateEngine
+import java.io.File
+import java.util.Map
+
+
+def chooseEmailTemplate(String emailTemplatePath) {
+	if(IS_SONAR_SCAN_ENABLED.toBoolean() && IS_SONAR_ENTERPRISE_EDITION.toBoolean() && IS_CHECKMARX_SCAN_ENABLED.toBoolean()){
+		emailTemplatePath="__config__/email/jenkins_checkmarx_sonarqube_full_deploy-email.template.html"
+	}
+	if(IS_SONAR_SCAN_ENABLED.toBoolean() && IS_SONAR_ENTERPRISE_EDITION.toBoolean()){
+		emailTemplatePath="__config__/email/jenkins_checkmarx_sonarqube_full_deploy-email.template.html"
+	}
+	else{
+		emailTemplatePath="__config__/email/jenkins_checkmarx_deploy-email.template.html"
+	}
+	return emailTemplatePath
+}
+def emailTemplate(params) {
+    script{
+		// def emailTemplatePath= chooseEmailTemplate();
+        // def emailTemplatePath="__config__/email/jenkins_checkmarx_sonarqube_full_deploy-email.templatee.html"
+        // def emailTemplatePath="__config__/email/jenkins_sonarqube_deploy.template.html"
+        def emailTemplatePath="__config__/email/jenkins_checkmarx_deploy-email.template.html"
+        def resultat= ""
+        if (fileExists("$emailTemplatePath")){
+            def fileContents = readFile "${emailTemplatePath}"
+            def engine = new StreamingTemplateEngine()
+            resultat = engine.createTemplate(fileContents).make(params).toString()
+        }
+        else{resultat = "Erreur : modèle d'email: ${emailTemplatePath} non trouvé"}
+        return resultat
+    }
+}
+def notifyByMail() {
+    if(env.BRANCH_NAME.startsWith("${env.BRANCH_START_WTH}")) {
+        println("----BEGIN EMAILING")
+        def sonarServerUrl = "${env.SONAR_SERVER_URL}"
+        def sonarQubePrjBoard = "${env.SONAR_DASHBOARD_URL}"
+        def sonarProjectKey = sonarQubePrjBoard.split('=')[1];
+        def icon = "✅"
+        def sonarEnterpriseReportLink ="$sonarServerUrl"+"/project/extension/securityreport/securityreport?branch=${env.BRANCH_NAME}&id="+"$sonarProjectKey"
+        def sonarQubeSecurityBoard = env.IS_SONAR_ENTERPRISE_EDITION.toBoolean()?sonarEnterpriseReportLink:sonarQubePrjBoard
+        script {
+            SONAR_SECURITY_DASHBOARD_URL="${sonarQubeSecurityBoard}"
+            IS_BUILD_STATUS = currentBuild.currentResult.toBoolean() && IS_SONAR_QG_STATUS.toBoolean()
+        }
+        if(IS_BUILD_STATUS != true) {icon = "❌"}
+        def emailStatus = IS_BUILD_STATUS.toBoolean() ? 'Succès' : 'Echec'
+        def jobname = "${env.JOB_NAME}".replace("%", "/").replace("%", "/")
+        def emailSubject  = "${icon} [ ${jobname}] [Build #${env.BUILD_NUMBER}]- ${emailStatus}! "
+		def emailAttachmentsPattern ='__config__\\email\\*.png,__config__\\email\\*.pdf,__config__\\email\\Report_CxSAST.html'
+        def mailRecipients = "${EMAIL_RECIPIENTS_LIST}"
+        def mailToReplyTo = "${EMAIL_REPLYTO_LIST}"
+        def isLogAttached = IS_BUILD_STATUS.toBoolean() ? false : true
+        def newParams = [
+            "emailSubject": "${emailSubject}",
+            "BUILD_URL": "${BUILD_URL}",
+            "BUILD_NUMBER": "${BUILD_NUMBER}",
+            "JOB_NAME": "${JOB_NAME}",
+            "SONAR_DASHBOARD_URL": "${SONAR_DASHBOARD_URL}",
+            "SONAR_SECURITY_DASHBOARD_URL": "${SONAR_SECURITY_DASHBOARD_URL}",
+            "IS_BUILD_STATUS": "${IS_BUILD_STATUS}",
+            "IS_SONAR_SCAN_STATUS": "${IS_SONAR_SCAN_STATUS}",
+            "IS_SONAR_QG_STATUS": "${IS_SONAR_QG_STATUS}",
+            "IS_DEPLOY_STATUS": "${IS_DEPLOY_STATUS}",
+            "IS_SONAR_ENTERPRISE_EDITION": "${params.IS_SONAR_ENTERPRISE_EDITION}",
+            "IS_SONAR_SCAN_ENABLED": "${params.IS_SONAR_SCAN_ENABLED}",
+            "IS_SONAR_QG_ENABLED": "${params.IS_SONAR_QG_ENABLED}",
+            "IS_DEPLOY_ENABLED": "${IS_DEPLOY_ENABLED}",
+            "IS_CHECKMARX_SCAN_ENABLED": "${params.IS_CHECKMARX_SCAN_ENABLED}",
+            "DEPLOY_URL_TO_LAUNCH": "${params.DEPLOY_URL_TO_LAUNCH}",
+            "DEPLOY_ENV" : "${params.DEPLOY_ENV}"
+        ]
+
+        debug_Println(newParams)
+
+        def emailBody = emailTemplate(newParams.minus(["emailSubject": "${emailSubject}"]));
+        env.ForEmailPlugin = env.WORKSPACE
+        emailext(mimeType: 'text/html',
+        replyTo: mailToReplyTo,
+        subject: emailSubject,
+        to: mailRecipients,
+        body: emailBody,
+        attachLog: isLogAttached,
+        attachmentsPattern: emailAttachmentsPattern)
+
+        createJenkinsViewEmailResultReport(emailBody,emailSubject,isLogAttached)
+        println("--END: EMAILING")
+    }
+}
+
+@NonCPS
+def debug_Println(list) {println(list)}
+
+def createJenkinsViewEmailResultReport(String emailBody,String emailSubject, isLogAttached){
+    sh returnStatus: true, script:"""rm -rf __config__/email/ViewEmailResult.html"""
+    def attachFilesDir = "__config__/email/"
+    def subjectAndFiles= """<section><h2>${emailSubject}</h2><p>📎${getDirAllFileName(attachFilesDir, isLogAttached)}</p><br/></section>"""
+    def emailFullBody= subjectAndFiles + emailBody
+    writeFile file: "__config__/email/ViewEmailResult.html", text: emailFullBody, encoding: "UTF-8"
+    publishHTML([allowMissing: true, alwaysLinkToLastBuild: true, keepAll: true, reportDir: "__config__\\email", reportFiles: 'ViewEmailResult.html', reportName: 'ViewEmailResult', reportTitles: ''])
+}
+def getFilesByExtension(ext, filesDir){return sh(returnStdout: true, script: "find ${filesDir} -type f -name *.${ext}").trim().replaceAll("${filesDir}/","")}
+def getDirAllFileName(attachFilesDir, isLogAttached)
+{
+    script{
+        //def files ="[${getFilesByExtension("docx",attachFilesDir)}, ${getFilesByExtension("xlsx",attachFilesDir)}]"
+        def files ="[${getFilesByExtension("pdf",attachFilesDir)}, ${getFilesByExtension("html",attachFilesDir)}]"
+        files = isLogAttached.toBoolean()?files.replaceAll("]",", build.log]"):files
+
+        // files.remove(files.indexOf("jenkins_checkmarx_deploy-email.template.html"))
+        return files.toString()
+    }
+}
+def createZipArtifacts (){
+
+  println("--DEBUT: createZipArtifacts")
+
+	print("--Creating mutiple zip files in  $WORKSPACE/ArchiveZip");
+	script {
+	print("--!!!!!Targeted framework : NET 6.0!!!!");
+	zip archive: true, dir: "${params.PRJ_CSPROJ_NAME}/bin/Release/net5.0/publish", exclude: ';', glob: ';', overwrite: true, zipFile: "ArchiveZip/${params.PRJ_CSPROJ_NAME}_To_deploy.zip"
+	zip archive: true, dir: "Tests/Coveragereport", exclude: ';', glob: ';', overwrite: true,zipFile: "ArchiveZip/${params.PRJ_CSPROJ_NAME}_CoverageReportHTML.zip"
+	zip archive: true, dir: "Tests/CoverageHistory", exclude: ';', glob: ';',overwrite: true, zipFile: "ArchiveZip/${params.PRJ_CSPROJ_NAME}_CoverageHistory.zip"
+	zip archive: true, dir: "Tests/TestResults", exclude: ';', glob: ';',overwrite: true, zipFile: "ArchiveZip/${params.PRJ_CSPROJ_NAME}_TestResults.zip"
+	}
+
+	print("--Cleanning not required $WORKSPACE/ArchiveZip");
+    dir("$WORKSPACE/ArchiveZip"){deleteDir()}
+
+	print("--Cleaning old JunitFiles in : Tests/generatedJUnitFiles");
+	dir("Tests/generatedJUnitFiles"){deleteDir()}
+
+	print("--Cleanning not required $WORKSPACE/Tests@tmp");
+	dir("$WORKSPACE/Tests@tmp") {deleteDir()}
+
+  println("--END: createZipArtifacts")
+}
+def zipWebsite(archiveName,filesToExclude) {
+   zip archive: true, dir: "${WORKSPACE}", exclude: filesToExclude, glob: '', overwrite: true, zipFile: archiveName
+}
+def restoreSolutionDependencies() {
+	dotnetRestore project: "${params.PRJ_SLN_NAME}.sln", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", verbosity: 'n'
+
+	// sh """#!/bin/bash
+	// ${DOTNET_CLI_HOME}//dotnet restore ${params.PRJ_SLN_NAME}.sln
+	// """
+}
+def cleanSolution() {
+	dotnetClean project: "${params.PRJ_SLN_NAME}.sln", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", verbosity: 'n'
+
+	// sh """#!/bin/bash
+    // ${DOTNET_CLI_HOME}\\dotnet clean ${WORKSPACE}\\${params.PRJ_SLN_NAME}.sln
+    // """
+}
+def buildSolution() {
+	dotnetBuild configuration: 'Release', project: "${params.PRJ_SOLUTION_NAME}.sln", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", verbosity: 'n', versionSuffix:"${env.BUILD_NUMBER}"
+
+	// dotnetBuild configuration: 'Release', project: "${params.PRJ_SOLUTION_NAME}.sln", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", verbosity: 'n', versionSuffix:"${env.BUILD_NUMBER}" version:'1.0.0'
+}
+def doUnitTest(dirPath)
+{
+    if(!dirPath.isEmpty()){
+		dir("${dirPath}") {deleteDir()}
+		unitTestAndCodeCoverage()
+		setBeforeDeployStatus()
+	}
+}
+def doIntegrationTest(dirPath)
+{
+    if(!dirPath.isEmpty()){
+		println("!!! TO DO ??")
+	}
+}
+
+def setBeforeDeployStatus() {
+    script {
+        IS_DEPLOY_ENABLED = currentBuild.currentResult.toBoolean()
+    }
+}
+def analyzeCodeCoverage() {
+    // // sh returnStatus: true, script: """CodeCoverage analyze /output:TestResults\\TestResults.coverage TestResults\\TestResults.xml"""
+	sleep(time: 2, unit: "SECONDS")
+}
+def unitTestAndCodeCoverage() {
+	sleep(time: 3, unit: "SECONDS")
+
+	// Adding package JUnitTestLogger --version 1.1.0
+	sh returnStatus: true, script:"""#!/bin/bash ${DOTNET_CLI_HOME}/dotnet add ${WORKSPACE}/Tests/Tests.csproj package JUnitTestLogger --version 1.1.0
+    """
+
+	// Adding package JUnitTestLogger --version 1.1.0
+	sh returnStatus: true, script:"""#!/bin/bash ${DOTNET_CLI_HOME}/dotnet add ${WORKSPACE}/Tests/Tests.csproj package JUnitTestLogger --version 1.1.0
+    """
+	  // dotnet add package coverlet.collector
+
+
+	// Code Coverage + logger TestResults.xml
+	dotnetTest blame: true, collect: 'Code Coverage', configuration: 'Release', continueOnError: true, logger: 'junit;LogFileName=TestResults.xml', project: 'Tests.csproj', sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", unstableIfErrors: true, verbosity: 'n', workDirectory: 'Tests'
+
+	// sh returnStatus: true, script:'${DOTNET_CLI_HOME}//dotnet test --logger:"junit;LogFileName=TestResults.xml" --configuration Release --collect "Code Coverage"'
+
+	// analyzecodeCoverage()
+	installAndUseReportgeneratorGlobalTool()
+}
+def installAndUseReportgeneratorGlobalTool() {
+	// sh returnStatus: true, script:"""#!/bin/bash
+    // dotnet tool install -g dotnet-reportgenerator-globaltool -v n
+    // """
+	sh returnStatus: true, script:"""#!/bin/bash
+    dotnet tool install dotnet-reportgenerator-globaltool --tool-path $JENKINS_HOME/.dotnet/tools -v n
+    """
+	// Show 'tools' dir content
+    sh returnStatus: true, script:"""#!/bin/bash
+    ls $JENKINS_HOME/.dotnet/tools
+    """
+	//
+	sleep(time: 4, unit: "SECONDS")
+
+	// // generated TestResults.trx & coverage report
+	// powershell returnStatus: true, script: '''
+	// $currtentDirPath = Get-Location | Select -expand Path
+	// ECHO "currtentDirPath : $currtentDirPath"
+	// $testFolderName = "$ENV:PRJ_CSPROJ_NAME.Tests"
+	// .\\__config__\\scripts\\ExecuteCodeCoverageInsidePipeline.ps1 -testFolderName $testFolderName
+	// '''
+
+	// Code Coverage + logger TestResults.xml
+	dotnetTest blame: true, collect: 'XPlat Code Coverage', configuration: 'Release', continueOnError: false, logger: 'trx;LogFileName=TestResults.trx', project: 'Tests.csproj', sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", unstableIfErrors: true, verbosity: 'n', workDirectory: 'Tests'
+
+	// sh returnStatus: true, script:'${DOTNET_CLI_HOME}//dotnet test --logger:"trx;LogFileName=TestResults.trx" --configuration Release --collect "XPlat Code Coverage"'
+
+	generateCdeCoverageAndHistoryWithReportgenerator()
+
+}
+def generateCdeCoverageAndHistoryWithReportgenerator() {
+	sh """#!/bin/bash
+    dotnet reportgenerator -reports:"TestResults/*/coverage.cobertura.xml" -targetdir:"Coveragereport" -reporttypes:"Html;Cobertura" -historydir:CoverageHistory
+    """
+}
+def publishSolution() {
+	// sh """#!/bin/bash
+    // dotnet publish {params.PRJ_CSPROJ_NAME}/${params.PRJ_CSPROJ_NAME}.csproj --configuration Release
+	// """
+
+	dotnetPublish configuration: 'Release', project: "${params.PRJ_CSPROJ_NAME}.csproj", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", selfContained: false, workDirectory: "${params.PRJ_CSPROJ_NAME}"
+}
+def publishXunitAndHtmlReport() {
+
+	dir("Tests") {
+	  // cobertura classCoverageTargets: '0, 0, 0', coberturaReportFile: 'TestResults/coverage.cobertura.xml', conditionalCoverageTargets: '70, 0, 0', enableNewApi: true, fileCoverageTargets: '0, 0, 0', lineCoverageTargets: '80, 0, 0', maxNumberOfBuilds: 0, methodCoverageTargets: '80, 0, 0', packageCoverageTargets: '0, 0, 0', sourceEncoding: 'ASCII', zoomCoverageChart: true
+
+	  cobertura autoUpdateHealth: false, autoUpdateStability: false, coberturaReportFile: 'Coveragereport\\Cobertura.xml', conditionalCoverageTargets: '70, 0, 0', enableNewApi: true, failUnhealthy: false, failUnstable: false, fileCoverageTargets: '0, 0, 0', lineCoverageTargets: '80, 0, 0', maxNumberOfBuilds: 0, methodCoverageTargets: '80, 0, 0', onlyStable: false, sourceEncoding: 'ASCII', zoomCoverageChart: true
+
+	  // step([$class: 'CoberturaPublisher', coberturaReportFile: 'TestResults\\coverage.cobertura.xml';])
+	  step([$class: 'CoberturaPublisher', coberturaReportFile: 'Coveragereport\\Cobertura.xml'])
+
+	  xunit([MSTest(excludesPattern: ';', pattern: 'TestResults/TestResults.trx', stopProcessingIfError: true)])
+	}
+	sleep(time: 5, unit: "SECONDS")
+}
+
+def publishSolutionHtmlAndCodeCoverage() {
+	publishSolution()
+	publishXunitAndHtmlReport()
+}
+def sendMaintenanceAlertHTML() {
+	def maintenanceFile = "__config__/scripts/sendMaintenanceAlertHTML.html"
+	deployToRemoteShare(isRemoteDirASubDirToDeployTo, serverCfgName, serverDir,true,maintenanceFile)
+}
+
+def deploy(isRemoteDirASubDirToDeployTo, serverCfgName, serverDir){
+        println("env.IS_DEPLOY_ENABLED: ${IS_DEPLOY_ENABLED}")
+        echo "Deploying to ${DEPLOY_ENV} on " + serverDir + " for: ${DEPLOY_URL_TO_LAUNCH}"
+		//
+		sendMaintenanceAlertHTML()
+		//
+        deployToRemoteShare(isRemoteDirASubDirToDeployTo, serverCfgName, serverDir,false,"${env.DEPLOY_DOTNET_SOURCE}")
+		//
+        script {IS_DEPLOY_STATUS = currentBuild.result == "SUCCESS"}
+}
+def deployToRemoteShare(isRemoteDirASubDirToDeployTo, serverCfgName, serverDir, isCleanRemote, srceFiles)
+{
+    cifsPublisher(
+        publishers: [
+            [configName: serverCfgName,
+            transfers: [
+                [cleanRemote: cleanRemote.toBoolean(),
+                excludes: "${env.DEPLOY_FILES_TO_EXCLUDE}",
+                flatten: false,
+                makeEmptyDirs: false,
+                noDefaultExcludes: false,
+                patternSeparator: '[, ]+',
+                remoteDirectory: isRemoteDirASubDirToDeployTo ? serverDir: "",
+                remoteDirectorySDF: false,
+                removePrefix: "${env.DEPLOY_CIFS_REMOVE_PREFIX}",
+                sourceFiles: srceFiles]],
+            usePromotionTimestamp: false,
+            useWorkspaceInPromotion: false,
+            verbose: false]])
+}
+
+def deployAppToEnvironment() {
+
+	script {IS_DEPLOY_STATUS = currentBuild.result == "SUCCESS"}
+	withCredentials([usernamePassword(credentialsId: "${ENV:DEPLOY_CREDENTIALS_ID}", passwordVariable: 'passVar', usernameVariable: 'userVar')])
+	{
+		println("Deploying with publishProfile")
+		println("currentBuild.currentResult.toBoolean()" + currentBuild.currentResult.toBoolean())
+
+		// sh returnStatus: true, script: "dotnet msbuild ${params.PRJ_CSPROJ_NAME}/${params.PRJ_CSPROJ_NAME}.csproj /p:DeployOnBuild=true /p:PublishProfile=${ENV:MSBUILD_PUBLISH_PROFILE_ENV}.pubxml /p:Password=%passVar% /p:VisualStudioVersion=${ENV:VisualStudioVersion}"
+
+		// sh returnStatus: true, script: "dotnet msbuild ${params.PRJ_CSPROJ_NAME}/${params.PRJ_CSPROJ_NAME}.csproj /p:DeployOnBuild=true /p:PublishProfile=${ENV:MSBUILD_PUBLISH_PROFILE_ENV}.pubxml /p:Password=%passVar% "
+
+		sh returnStatus: true, script: "dotnet msbuild ${params.PRJ_CSPROJ_NAME}/${params.PRJ_CSPROJ_NAME}.csproj /p:DeployOnBuild=true /p:PublishProfile=${ENV:MSBUILD_PUBLISH_PROFILE_ENV}.pubxml /p:Username=%userVar% /p:Password=%passVar%"
+
+		// dotnetBuild configuration: 'Release', project: "${params.PRJ_SOLUTION_NAME}.sln", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", verbosity: 'n', versionSuffix:"${env.BUILD_NUMBER}"
+
+	// dotnetBuild configuration: 'Release', project: "${params.PRJ_SOLUTION_NAME}.sln", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", verbosity: 'n', versionSuffix:"${env.BUILD_NUMBER}" version:'1.0.0'
+	}
+
+	sleep(time: 8, unit: "SECONDS")
+}
+
+def runCheckmarxScan(){
+    // Cf. https://checkmarx.com/resource/documents/en/34965-8158-setting-up-scans-in-jenkins.html
+	// Use Jenkins Pipeline Syntax or Jenkin Snippet Generator .
+    script {
+        step([$class: 'CxScanBuilder',
+				avoidDuplicateProjectScans: true,
+				comment: '',
+				configAsCode: true,
+				credentialsId: '',
+				customFields: '',
+                dependencyScanConfig: [dependencyScanExcludeFolders: '',
+					dependencyScanPatterns: '', enableScaResolver: 'MANIFEST', fsaVariables: '',
+					osaArchiveIncludePatterns: '*.zip, *.war, *.ear, *.tgz', pathToScaResolver: '',
+					sastCredentialsId: '', scaAccessControlUrl: 'https://platform.checkmarx.net',
+					scaConfigFile: '', scaCredentialsId: '', scaEnvVariables: '', scaResolverAddParameters: '',
+					scaSASTProjectFullPath: '', scaSASTProjectID: '', scaSastServerUrl: '',
+					scaServerUrl: 'https://api-sca.checkmarx.net', scaTeamPath: '', scaTenant: '',
+					scaWebAppUrl: 'https://sca.checkmarx.net'],
+					enableProjectPolicyEnforcement: false,
+					exclusionsSetting: 'global',
+					fullScanCycle: 10,
+					sastEnabled: true,
+					sourceEncoding: '1',
+					//exclusionsSetting: 'job',
+					failBuildOnNewResults: true,
+					failBuildOnNewSeverity: 'HIGH',
+					groupId: '4',
+					generatePdfReport: true,
+					excludeFolders: "${env.CHECKMARX_DIR_TO_EXCLUDE}",
+					filterPattern: "${env.CHECKMARX_ITEMS_TO_EXCLUDE}",
+					password: '${CHECKMARX_CREDS_PSW}',
+					projectName: "${CHECKMARX_PRJ_NAME}",
+					username: "${CHECKMARX_CREDS_USR}",
+					serverUrl: "${CHECKMARX_URL}",
+					vulnerabilityThresholdResult: 'FAILURE',
+					highThreshold: "${CHECKMARX_HIGHTHRESHOLD}",
+					mediumThreshold: "${CHECKMARX_MEDIUMTHRESHOLD}",
+					lowThreshold: "${CHECKMARX_LOWTHRESHOLD}",
+					waitForResultsEnabled: true])
+    }
+
+    sendCheckmarkReportsToEmailDir()
+    // publishHTML([allowMissing: true, alwaysLinkToLastBuild: true, keepAll: true, reportDir: "__config__\\email", reportFiles: 'Report_CxSAST.html', reportName: 'CheckmarxReport', reportTitles: ''])
+
+    println("currentBuild.currentResult.toBoolean()" + currentBuild.currentResult.toBoolean())
+}
+
+def sendCheckmarkReportsToEmailDir()
+{
+    def copyHtmlReportCmd="cp Checkmarx/Reports/Report_CxSAST.html __config__/email/Report_CxSAST.html"
+    def copyPdfReportCmd="cp Checkmarx/Reports/*.pdf __config__/email/"
+    sh returnStatus: true, script:"$copyHtmlReportCmd;$copyPdfReportCmd"
+}
+
+def runSonarScan(){
+	//Cf. https://docs.sonarqube.org/latest/analysis/scan/sonarscanner-for-msbuild/
+	//    https://docs.sonarqube.org/latest/analysis/scan/sonarscanner/
+    script {
+        withSonarQubeEnv(installationName:'SonarQubeServer')
+        {
+			sh "${env.SONAR_HOME}\\SonarQube.Scanner.MSBuild.exe begin /k:{env.SONAR_PRJ_KEY}"
+			sh 'MSBuild.exe /t:Rebuild'
+			sh "${env.SONAR_HOME}\\SonarQube.Scanner.MSBuild.exe end"
+
+			// env.PATH = "$PATH:/home/jenkins/.dotnet"
+			// env.PATH = "$PATH:/home/jenkins/.dotnet/tools"
+			// sh "dotnet ${scannerHome}/SonarScanner.MSBuild.dll begin /k:\"sap_fehlertracking-db_AYIBDL0ZccYnbt4oP4o9\""
+			// sh "dotnet build fehlertracking.sln"
+			// sh "dotnet ${scannerHome}/SonarScanner.MSBuild.dll end"
+
+
+			// def SONAR_SCAN_STATUS = sh returnStatus: true, script:"""
+            // ${env.SONAR_HOME}/bin/sonar-scanner"""
+
+			def SONAR_SCAN_STATUS = sh returnStatus: true, script:"""
+            ${env.SONAR_HOME}\\SonarQube.Scanner.MSBuild.exe end"""
+
+
+            IS_SONAR_SCAN_STATUS = SONAR_SCAN_STATUS==0?true:false
+        }
+    }
+}
+def checkmarxScan(){
+    echo('--- START: checkmarx scan')
+    runCheckmarxScan()
+    echo('END: checkmarx scan')
+}
+def sonarQubeScan(){
+    echo('--- START: sonarQube scan')
+	runSonarScan()
+    echo('END: sonarQube scan')
+}
+def sonarQualityGate(){
+    echo('--- START: sonar Q.G.')
+    script {
+        timeout(time: 1, unit: 'HOURS') {
+            def qg = waitForQualityGate(webhookSecretId: 'sonar-to-jenkins-webhook')
+            println "qg.status:${qg.status}"
+            if (qg.status != 'OK') {println ("Pipeline aborted due to quality gate failure: ${qg.status}")}
+            else{IS_SONAR_QG_STATUS = true}
+        }
+    }
+    echo('END: sonar Q.G.')
+}
+def checkAndEnableDeployOnPassedQualityGate(){
+    sonarQualityGate()
+    script {
+        if("${IS_SONAR_QG_STATUS}".toBoolean() != false){IS_DEPLOY_ENABLED = true}
+        else {IS_DEPLOY_ENABLED = false}
+    }
+}
+def addDeployZipToJenkinsArtefacts()
+{
+    zipWebsite("DeployWebsite.zip","${env.DEPLOY_FILES_TO_EXCLUDE}")
+}
+
+def enableContentSecurityPolicyForReport(){
+    script {System.setProperty("hudson.model.DirectoryBrowserSupport.CSP", "default-src 'self'; style-src 'self' 'unsafe-inline';");}
+}
+def checkmarxPostAlways()
+{
+    script {
+        IS_DEPLOY_ENABLED = currentBuild.currentResult.toBoolean()
+    }
+}
+
+def excludeByType(lst,type)
+{
+  def list = lst.split(',')
+  def res = []
+  if(type =="D")
+  {
+    list.each {res.add("!**/" + "$it" + "/**/*")}
+    res = res.join(',').trim().toString()
+    return res
+
+  }
+  if(type =="F")
+  {
+    list.each {res.add("!" + "$it")}
+    res = res.join(',').trim().toString()
+    return res
+  }
+  else
+  {
+    list.each {res.add("**/*" + "$it")}
+    res = res.join(',').trim().toString()
+    return res
+  }
+}
+def getFullCheckmarxExcludePattern(C_DIR,C8_FILE,C_EXT)
+{
+  def resPattern =(excludeByType(C_DIR, "D")+","+excludeByType(C8_FILE, "F")+","+excludeByType(C_EXT, "E")).trim()
+  return resPattern
+}
+
+pipeline {
+  agent {label params.AGENT == "any" ? "" : params.AGENT}
+    parameters {
+        // -- NODE - TO CONFIGURE
+        choice(name: "AGENT", choices: ["any", "built-in"])
+
+		// -- PROJECT PARAMS - TO CONFIGURE
+		string(name: 'PRJ_SLN_NAME', defaultValue: '<.NET_PRJ_SOLUTION_NAME>',
+			   description: '''Nom de la solution du projet.Exemple : entrez NET_PRJ_SOLUTION_NAME pour "NET_PRJ_SOLUTION_NAME.sln"''',
+			   trim:true)
+		string(name: 'PRJ_CSPROJ_NAME', defaultValue: 'api',
+			   description: '''Nom du projet csproj. Exemple : entrez api pour "api.csproj"''',
+			   trim:true)
+		string(name: 'PRJ_RELEASE_VERSION', defaultValue: '1.0',
+			   description: '''Version de la release du projet''',
+			   trim:true)
+		string(name: 'PRJ_TARGETED_FRAMEWORK', defaultValue: '6',
+			   description: '''targeted dotnet framework version.Ex:6,7...''',
+			   trim:true)
+
+        // -- EMAIL LISTS - TO CONFIGURE
+        string(name: 'EMAIL_RECIPIENTS_LIST', defaultValue: 'user_1_prenom_nom@[VOTRE_SOCIETE].fr,user_2_prenom_nom@[VOTRE_SOCIETE].fr', description: 'Destinataires des mails. Exemple :  user_1_prenom_nom@[VOTRE_SOCIETE].fr, user_2_prenom_nom@[VOTRE_SOCIETE].fr',
+                trim:true)
+        string(name: 'EMAIL_REPLYTO_LIST', defaultValue: 'user_1_prenom_nom@[VOTRE_SOCIETE].fr,no-reply@[VOTRE_SOCIETE].fr', description: 'Adresses emails no-reply. Exemple :  noreply@[VOTRE_SOCIETE].fr,user2@[VOTRE_SOCIETE].fr',
+                trim:true)
+
+        // -- DEPLOYMENT - TO CONFIGURE
+        choice(name: 'DEPLOY_ENV', choices: ['Recette','Production','Development'], description: '''Environnement de déploiement.Par défaut Recette.''')
+        string(name: 'DEPLOY_SITE_NAME', defaultValue: 'dotnet-dev.[VOTRE_SOCIETE].fr', trim:true)
+        string(name: 'DEPLOY_SERVER_NAME', defaultValue: 'fr0002SR167[VOTRE_SOCIETE]-ACCOUNT', description: '''configure server name in Jenkins "Publish over CIFS settings''', trim:true)
+        string(name: 'DEPLOY_SERVER_DIR', defaultValue: 'dotnet-dev.[VOTRE_SOCIETE].fr', description: '''configure server remoteDir in Jenkins "Publish over CIFS settings''', trim:true)
+        string(name: 'DEPLOY_URL_TO_LAUNCH', defaultValue: 'http://dotnet-dev.[VOTRE_SOCIETE].Fr', trim:true)
+
+        // -- PIPELINE STAGE - TO CONFIGURE
+        booleanParam(name: 'IS_BUILD_ENABLED', defaultValue: true, description: '''Détermine si étape "Build & Restore" est exécutée.Par défaut true''')
+        booleanParam(name: 'IS_TEST_UNIT_ENABLED', defaultValue: true, description: '''Détermine si étape "Unit Test" est exécutée.Par défaut true''')
+        booleanParam(name: 'IS_TEST_INTEGRATION_ENABLED', defaultValue: false, description: '''Détermine si étape "Integration Test" est exécutée.Par défaut false''')
+        booleanParam(name: 'IS_SONAR_SCAN_ENABLED', defaultValue: false, description: '''Détermine si étape "Sonar scan" est exécutée.Par défaut false''')
+        booleanParam(name: 'IS_SONAR_QG_ENABLED', defaultValue: false, description: '''Détermine si étape "Sonar quality gate" est exécutée.Par défaut false''')
+		booleanParam(name: 'IS_SONAR_ENTERPRISE_EDITION', defaultValue: false, description: '''Détermine si sonarQube est la version enterprise.Par défaut false''')
+		booleanParam(name: 'IS_CHECKMARX_SCAN_ENABLED', defaultValue: false, description: '''Détermine si étape "checkmarx scan" est exécutée.Par défaut false''')
+        booleanParam(name: 'IS_DEPLOY_ENABLED', defaultValue: false, description: '''Détermine si étape "Deploy" est exécutée.Par défaut false''')
+    }
+  environment {
+    // --1.BRANCH SCAN BY JENKINS - TO CONFIGURE
+    // BRANCH_START_WTH ="CID_CONFIG/"
+    // BRANCH_START_WTH ="ci/"
+    BRANCH_START_WTH ="<ci/branche_name>"
+
+  	// --2.PROJ - TO CONFIGURE
+    DEPLOY_CREDENTIALS_ID = "deploy-${DEPLOY_ENV}-credentials".toLowerCase()
+    MSBUILD_PUBLISH_PROFILE_ENV = "${DEPLOY_ENV}Deploy"
+    VisualStudioVersion = "<VisualStudioVersion> Ex:17.1.0.7609"
+    DEPLOY_DOTNET_SOURCE ="${env.PRJ_CSPROJ_NAME}/bin/release/net${PRJ_TARGETED_FRAMEWORK}.0/publish/**"
+    DEPLOY_CIFS_REMOVE_PREFIX ="${env.PRJ_CSPROJ_NAME}/bin/release/net${PRJ_TARGETED_FRAMEWORK}.0/publish/"
+    DEPLOY_FILES_TO_EXCLUDE =""
+	DEPLOY_ITEMS_TO_EXCLUDE ="README.md,.git/**,.scannerwork/**,Checkmarx/**,__config__,__config__/**,.gitignore,sonar-project.properties,Jenkinsfile,DeployWebsite.zip"
+
+    // --3. CHECKMARX - TO CONFIGURE
+    CHECKMARX_URL = "http://checkmarx.[VOTRE_SOCIETE].fr"
+    CHECKMARX_PRJ_NAME = <CHECKMARX_PRJ_NAME>
+    CHECKMARX_CREDS = credentials('checkmarx-authentication_ids')
+    CHECKMARX_HIGHTHRESHOLD = 1
+    CHECKMARX_MEDIUMTHRESHOLD = 1
+    CHECKMARX_LOWTHRESHOLD = 1
+    CHECKMARX_DIR_TO_EXCLUDE ="node_modules,_cvs,.svn,.hg,.git,.bzr,.gitgnore,.gradle,.checkstyle,.classpath,bin,obj,backup,.idea,.scannerwork,Checkmarx,__config__"
+    CHECKMARX_FILE_TO_EXCLUDE =".gitignore,OSADependencies.json,sonar-project.properties,Jenkinsfile,DeployWebsite.zip"
+    CHECKMARX_EXT_TO_EXCLUDE =""".md, .DS_Store, .ipr, .iws, .bak, .tmp, .aac, .aif, .iff, .m3u, .mid, .mp3,.mpa, .ra, .wav, .wma, .3g2, .3gp, .asf, .asx, .avi, .flv, .mov, .mp4, .mpg, .rm,
+    .swf, .vob,.wmv, .bmp, .gif, .jpg, .png, .psd, .tif, .swf,.jar, .zip, .rar, .exe, .dll, .pdb, .7z, .gz, .tar.gz, .tar, .gz, .ahtm, .ahtml, .fhtml, .hdm, .hdml, .hsql, .ht, .hta, .htc,
+    .htd, .war, .ear,.htmls, .ihtml, .mht, .mhtm, .mhtml, .ssi, .stm, .bin,.lock,.svg,.obj,.stml, .ttml, .txn, .xhtm, .xhtml, .class, .iml"""
+    CHECKMARX_ITEMS_TO_EXCLUDE = """!Checkmarx/Reports/*.*, !.scannerwork/*.*,!__config__/*.*,!__config__/email/*.*,!__config__/scripts/*.*,${getFullCheckmarxExcludePattern(CHECKMARX_DIR_TO_EXCLUDE,CHECKMARX_FILE_TO_EXCLUDE,CHECKMARX_EXT_TO_EXCLUDE)}"""
+
+    // --4.SONAR - TO CONFIGURE
+    SONAR_USER = <SONAR_USER>
+	SONAR_PRJ_KEY = <PROJECT_KEY>
+
+    // --5.TOOLS & URLS & SATES - NO CONFIG REQUIRED
+	REPORTGENERATOR_HOME_SHORT = "${JENKINS_HOME}/.dotnet/tools"
+	REPORTGENERATOR_HOME_LONG = "${JENKINS_HOME}/.dotnet/tools/.store/dotnet-reportgenerator-globaltool/5.1.9/dotnet-reportgenerator-globaltool/5.1.9/tools/net${PRJ_TARGETED_FRAMEWORK}.0/any"
+	POWERSHELL_HOME =tool name: 'DefaultLinux', type: 'hudson.plugins.powershell.PowerShellInstallation'
+    SONAR_HOME = tool 'SonarQubeScanner'
+    NODEJS_HOME = "${tool 'NodeJS'}"
+	DOTNET_CLI_HOME = "${tool "dotnet${PRJ_TARGETED_FRAMEWORK}"}"
+    JENKINS_HTTPS_URL = "https://jenkins.[VOTRE_SOCIETE].fr/"
+    BUILD_URL = "${BUILD_URL}"
+    SONAR_SERVER_URL = "https://jenkins.[VOTRE_SOCIETE].fr"
+    SONAR_DASHBOARD_URL = "https://jenkins.[VOTRE_SOCIETE].fr/dashboard?id=${env.SONAR_PRJ_KEY}"
+    SONAR_SECURITY_DASHBOARD_URL = "${env.SONAR_SERVER_URL}"
+    JOB_NAME = "${JOB_NAME.substring(JOB_NAME.lastIndexOf('/') + 1, JOB_NAME.length()).replace("%", "/")}"
+    IS_BUILD_STATUS = false
+    IS_SONAR_QG_STATUS = false
+    IS_SONAR_SCAN_STATUS = false
+    IS_DEPLOY_STATUS = false
+    IS_CHECKMARX_SCAN_STATUS = false
+
+    // --6.CUSTOM ENV PATH FOR JENKINS TOOLS - NO CONFIG REQUIRED
+	PATH ="${env.REPORTGENERATOR_HOME_SHORT}:${env.REPORTGENERATOR_HOME_LONG}:${env.NODEJS_HOME}/bin:${env.DOTNET_CLI_HOME}:${env.SONAR_HOME}/bin:${env.PATH}"
+  }
+  options {
+    skipDefaultCheckout(true)
+    parallelsAlwaysFailFast()
+    buildDiscarder(logRotator(numToKeepStr: '100', artifactNumToKeepStr: '100', daysToKeepStr: '365', artifactDaysToKeepStr: '365'))
+    disableConcurrentBuilds()
+  }
+  stages {
+          stage('Init') {
+        when {expression {env.BRANCH_NAME.startsWith("${env.BRANCH_START_WTH}")}}
+        steps {
+             enableContentSecurityPolicyForReport()
+             deleteDir()
+			 // cleanWs()
+        }
+    }
+    stage('Checkout') {
+        when {expression {env.BRANCH_NAME.startsWith("${env.BRANCH_START_WTH}")}}
+        steps { println("BRANCH_NAME : " + env.BRANCH_NAME)
+            checkout scm
+        }
+    }
+    stage('Restore') {
+        when {expression {env.BRANCH_NAME.startsWith("${env.BRANCH_START_WTH}")}}
+        steps {restoreSolutionDependencies()}
+    }
+    stage('Clean') {
+        when {expression {env.BRANCH_NAME.startsWith("${env.BRANCH_START_WTH}")}}
+        steps {cleanSolution()}
+    }
+    stage('Build') {
+        when {expression {env.BRANCH_NAME.startsWith("${env.BRANCH_START_WTH}")}}
+        steps {buildSolution()}
+    }
+    stage('Test: Unit Test') {
+        when {expression {params.IS_TEST_UNIT_ENABLED && env.BRANCH_NAME.startsWith("${env.BRANCH_START_WTH}")}}
+        steps {doUnitTest("Tests/TestResults")}
+    }
+    stage('Test: Integration Test') {
+        when {expression {params.IS_TEST_INTEGRATION_ENABLED && env.BRANCH_NAME.startsWith("${env.BRANCH_START_WTH}")}}
+        steps {doIntegrationTest("Integrations")}
+    }
+    stage('Checkmarx Scan') {
+        when {expression {params.IS_CHECKMARX_SCAN_ENABLED && env.BRANCH_NAME.startsWith("${env.BRANCH_START_WTH}")}}
+        steps {checkmarxScan()}
+        post {
+            always {checkmarxPostAlways()}
+        }
+    }
+    stage('SonarQube Scan') {
+        when {expression {params.IS_SONAR_SCAN_ENABLED && env.BRANCH_NAME.startsWith("${env.BRANCH_START_WTH}")}}
+        steps {sonarQubeScan()}
+    }
+    stage('Quality Gate') {
+        when {expression {params.IS_SONAR_SCAN_ENABLED && params.IS_SONAR_QG_ENABLED && env.BRANCH_NAME.startsWith("${env.BRANCH_START_WTH}")}}
+        steps {checkAndEnableDeployOnPassedQualityGate()}
+    }
+	  stage('Publish') {
+		  when {expression {env.BRANCH_NAME.startsWith("${env.BRANCH_START_WTH}")}}
+		  steps {publishSolutionHtmlAndCodeCoverage()}
+	  }
+	  stage('Deploy') {
+		  //WITH CIFS
+		  // when {expression {IS_DEPLOY_ENABLED && (currentBuild.result == null || currentBuild.result == 'SUCCESS')&& env.BRANCH_NAME.startsWith("${env.BRANCH_START_WTH}")}}
+		  when {expression {IS_DEPLOY_ENABLED && env.BRANCH_NAME.startsWith("${env.BRANCH_START_WTH}")}}
+		  steps {
+				// With CIFS
+				deploy(false,env.DEPLOY_SERVER_NAME, env.DEPLOY_SERVER_DIR)
+				// With MSBuild
+				deployAppToEnvironment()
+			  }
+	  }
+  }
+  post {
+    always {
+        cleanWs deleteDirs: true, disableDeferredWipeout: true, notFailBuild: true, patterns: [[pattern: '.gitignore', type: 'INCLUDE'], [pattern: '.propsfile', type: 'EXCLUDE']]
+    }
+    success {notifyByMail()}
+    failure {notifyByMail()}
+  }
+}
