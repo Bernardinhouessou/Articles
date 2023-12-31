@@ -19,9 +19,6 @@ def chooseEmailTemplate(String emailTemplatePath) {
 }
 def emailTemplate(params) {
     script{
-		// def emailTemplatePath= chooseEmailTemplate();
-        // def emailTemplatePath="__config__/email/jenkins_checkmarx_sonarqube_full_deploy-email.templatee.html"
-        // def emailTemplatePath="__config__/email/jenkins_sonarqube_deploy.template.html"
         def emailTemplatePath="__config__/email/jenkins_checkmarx_deploy-email.template.html"
         def resultat= ""
         if (fileExists("$emailTemplatePath")){
@@ -85,7 +82,6 @@ def notifyByMail() {
         body: emailBody,
         attachLog: isLogAttached,
         attachmentsPattern: emailAttachmentsPattern)
-
         createJenkinsViewEmailResultReport(emailBody,emailSubject,isLogAttached)
         println("--END: EMAILING")
     }
@@ -106,29 +102,28 @@ def getFilesByExtension(ext, filesDir){return sh(returnStdout: true, script: "fi
 def getDirAllFileName(attachFilesDir, isLogAttached)
 {
     script{
-        //def files ="[${getFilesByExtension("docx",attachFilesDir)}, ${getFilesByExtension("xlsx",attachFilesDir)}]"
-        def files ="[${getFilesByExtension("pdf",attachFilesDir)}, ${getFilesByExtension("html",attachFilesDir)}]"
-        files = isLogAttached.toBoolean()?files.replaceAll("]",", build.log]"):files
-
-        // files.remove(files.indexOf("jenkins_checkmarx_deploy-email.template.html"))
+	//def files ="[${getFilesByExtension("docx",attachFilesDir)}, ${getFilesByExtension("xlsx",attachFilesDir)}]"
+	def files ="[${getFilesByExtension("pdf",attachFilesDir)}, ${getFilesByExtension("html",attachFilesDir)}]"
+	files = isLogAttached.toBoolean()?files.replaceAll("]",", build.log]"):files
+	// files.remove(files.indexOf("jenkins_checkmarx_deploy-email.template.html"))
         return files.toString()
     }
 }
 def createZipArtifacts (){
 
-  println("--DEBUT: createZipArtifacts")
+println("--DEBUT: createZipArtifacts")
 
 	print("--Creating mutiple zip files in  $WORKSPACE/ArchiveZip");
 	script {
 	print("--!!!!!Targeted framework : NET 6.0!!!!");
-	zip archive: true, dir: "${params.PRJ_CSPROJ_NAME}/bin/Release/net5.0/publish", exclude: ';', glob: ';', overwrite: true, zipFile: "ArchiveZip/${params.PRJ_CSPROJ_NAME}_To_deploy.zip"
+	zip archive: true, dir: "${params.PRJ_CSPROJ_NAME}/bin/Release/net6.0/publish", exclude: ';', glob: ';', overwrite: true, zipFile: "ArchiveZip/${params.PRJ_CSPROJ_NAME}_To_deploy.zip"
 	zip archive: true, dir: "Tests/Coveragereport", exclude: ';', glob: ';', overwrite: true,zipFile: "ArchiveZip/${params.PRJ_CSPROJ_NAME}_CoverageReportHTML.zip"
 	zip archive: true, dir: "Tests/CoverageHistory", exclude: ';', glob: ';',overwrite: true, zipFile: "ArchiveZip/${params.PRJ_CSPROJ_NAME}_CoverageHistory.zip"
 	zip archive: true, dir: "Tests/TestResults", exclude: ';', glob: ';',overwrite: true, zipFile: "ArchiveZip/${params.PRJ_CSPROJ_NAME}_TestResults.zip"
 	}
 
 	print("--Cleanning not required $WORKSPACE/ArchiveZip");
-    dir("$WORKSPACE/ArchiveZip"){deleteDir()}
+        dir("$WORKSPACE/ArchiveZip"){deleteDir()}
 
 	print("--Cleaning old JunitFiles in : Tests/generatedJUnitFiles");
 	dir("Tests/generatedJUnitFiles"){deleteDir()}
@@ -143,21 +138,18 @@ def zipWebsite(archiveName,filesToExclude) {
 }
 def restoreSolutionDependencies() {
 	dotnetRestore project: "${params.PRJ_SLN_NAME}.sln", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", verbosity: 'n'
-
 	// sh """#!/bin/bash
 	// ${DOTNET_CLI_HOME}//dotnet restore ${params.PRJ_SLN_NAME}.sln
 	// """
 }
 def cleanSolution() {
 	dotnetClean project: "${params.PRJ_SLN_NAME}.sln", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", verbosity: 'n'
-
 	// sh """#!/bin/bash
-    // ${DOTNET_CLI_HOME}\\dotnet clean ${WORKSPACE}\\${params.PRJ_SLN_NAME}.sln
-    // """
+	// ${DOTNET_CLI_HOME}\\dotnet clean ${WORKSPACE}\\${params.PRJ_SLN_NAME}.sln
+	// """
 }
 def buildSolution() {
 	dotnetBuild configuration: 'Release', project: "${params.PRJ_SOLUTION_NAME}.sln", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", verbosity: 'n', versionSuffix:"${env.BUILD_NUMBER}"
-
 	// dotnetBuild configuration: 'Release', project: "${params.PRJ_SOLUTION_NAME}.sln", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", verbosity: 'n', versionSuffix:"${env.BUILD_NUMBER}" version:'1.0.0'
 }
 def doUnitTest(dirPath)
@@ -170,48 +162,36 @@ def doUnitTest(dirPath)
 }
 def doIntegrationTest(dirPath)
 {
-    if(!dirPath.isEmpty()){
-		println("!!! TO DO ??")
-	}
+    if(!dirPath.isEmpty()){println("!!! TO DO ??")}
 }
 
-def setBeforeDeployStatus() {
-    script {
-        IS_DEPLOY_ENABLED = currentBuild.currentResult.toBoolean()
-    }
-}
+def setBeforeDeployStatus() {script {IS_DEPLOY_ENABLED = currentBuild.currentResult.toBoolean()}}
 def analyzeCodeCoverage() {
-    // // sh returnStatus: true, script: """CodeCoverage analyze /output:TestResults\\TestResults.coverage TestResults\\TestResults.xml"""
+	// // sh returnStatus: true, script: """CodeCoverage analyze /output:TestResults\\TestResults.coverage TestResults\\TestResults.xml"""
 	sleep(time: 2, unit: "SECONDS")
 }
 def unitTestAndCodeCoverage() {
 	sleep(time: 3, unit: "SECONDS")
-
 	// Adding package JUnitTestLogger --version 1.1.0
 	sh returnStatus: true, script:"""#!/bin/bash ${DOTNET_CLI_HOME}/dotnet add ${WORKSPACE}/Tests/Tests.csproj package JUnitTestLogger --version 1.1.0
-    """
-
+	"""
 	// Adding package JUnitTestLogger --version 1.1.0
 	sh returnStatus: true, script:"""#!/bin/bash ${DOTNET_CLI_HOME}/dotnet add ${WORKSPACE}/Tests/Tests.csproj package JUnitTestLogger --version 1.1.0
-    """
-	  // dotnet add package coverlet.collector
-
-
+	"""
+	// dotnet add package coverlet.collector
 	// Code Coverage + logger TestResults.xml
 	dotnetTest blame: true, collect: 'Code Coverage', configuration: 'Release', continueOnError: true, logger: 'junit;LogFileName=TestResults.xml', project: 'Tests.csproj', sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", unstableIfErrors: true, verbosity: 'n', workDirectory: 'Tests'
-
 	// sh returnStatus: true, script:'${DOTNET_CLI_HOME}//dotnet test --logger:"junit;LogFileName=TestResults.xml" --configuration Release --collect "Code Coverage"'
-
 	// analyzecodeCoverage()
 	installAndUseReportgeneratorGlobalTool()
 }
 def installAndUseReportgeneratorGlobalTool() {
 	// sh returnStatus: true, script:"""#!/bin/bash
-    // dotnet tool install -g dotnet-reportgenerator-globaltool -v n
-    // """
+	// dotnet tool install -g dotnet-reportgenerator-globaltool -v n
+	// """
 	sh returnStatus: true, script:"""#!/bin/bash
-    dotnet tool install dotnet-reportgenerator-globaltool --tool-path $JENKINS_HOME/.dotnet/tools -v n
-    """
+	dotnet tool install dotnet-reportgenerator-globaltool --tool-path $JENKINS_HOME/.dotnet/tools -v n
+	"""
 	// Show 'tools' dir content
     sh returnStatus: true, script:"""#!/bin/bash
     ls $JENKINS_HOME/.dotnet/tools
@@ -229,9 +209,7 @@ def installAndUseReportgeneratorGlobalTool() {
 
 	// Code Coverage + logger TestResults.xml
 	dotnetTest blame: true, collect: 'XPlat Code Coverage', configuration: 'Release', continueOnError: false, logger: 'trx;LogFileName=TestResults.trx', project: 'Tests.csproj', sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", unstableIfErrors: true, verbosity: 'n', workDirectory: 'Tests'
-
 	// sh returnStatus: true, script:'${DOTNET_CLI_HOME}//dotnet test --logger:"trx;LogFileName=TestResults.trx" --configuration Release --collect "XPlat Code Coverage"'
-
 	generateCdeCoverageAndHistoryWithReportgenerator()
 
 }
@@ -242,21 +220,17 @@ def generateCdeCoverageAndHistoryWithReportgenerator() {
 }
 def publishSolution() {
 	// sh """#!/bin/bash
-    // dotnet publish {params.PRJ_CSPROJ_NAME}/${params.PRJ_CSPROJ_NAME}.csproj --configuration Release
+	// dotnet publish {params.PRJ_CSPROJ_NAME}/${params.PRJ_CSPROJ_NAME}.csproj --configuration Release
 	// """
-
 	dotnetPublish configuration: 'Release', project: "${params.PRJ_CSPROJ_NAME}.csproj", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", selfContained: false, workDirectory: "${params.PRJ_CSPROJ_NAME}"
 }
 def publishXunitAndHtmlReport() {
 
 	dir("Tests") {
 	  // cobertura classCoverageTargets: '0, 0, 0', coberturaReportFile: 'TestResults/coverage.cobertura.xml', conditionalCoverageTargets: '70, 0, 0', enableNewApi: true, fileCoverageTargets: '0, 0, 0', lineCoverageTargets: '80, 0, 0', maxNumberOfBuilds: 0, methodCoverageTargets: '80, 0, 0', packageCoverageTargets: '0, 0, 0', sourceEncoding: 'ASCII', zoomCoverageChart: true
-
 	  cobertura autoUpdateHealth: false, autoUpdateStability: false, coberturaReportFile: 'Coveragereport\\Cobertura.xml', conditionalCoverageTargets: '70, 0, 0', enableNewApi: true, failUnhealthy: false, failUnstable: false, fileCoverageTargets: '0, 0, 0', lineCoverageTargets: '80, 0, 0', maxNumberOfBuilds: 0, methodCoverageTargets: '80, 0, 0', onlyStable: false, sourceEncoding: 'ASCII', zoomCoverageChart: true
-
 	  // step([$class: 'CoberturaPublisher', coberturaReportFile: 'TestResults\\coverage.cobertura.xml';])
 	  step([$class: 'CoberturaPublisher', coberturaReportFile: 'Coveragereport\\Cobertura.xml'])
-
 	  xunit([MSTest(excludesPattern: ';', pattern: 'TestResults/TestResults.trx', stopProcessingIfError: true)])
 	}
 	sleep(time: 5, unit: "SECONDS")
@@ -272,14 +246,14 @@ def sendMaintenanceAlertHTML() {
 }
 
 def deploy(isRemoteDirASubDirToDeployTo, serverCfgName, serverDir){
-        println("env.IS_DEPLOY_ENABLED: ${IS_DEPLOY_ENABLED}")
-        echo "Deploying to ${DEPLOY_ENV} on " + serverDir + " for: ${DEPLOY_URL_TO_LAUNCH}"
-		//
-		sendMaintenanceAlertHTML()
-		//
-        deployToRemoteShare(isRemoteDirASubDirToDeployTo, serverCfgName, serverDir,false,"${env.DEPLOY_DOTNET_SOURCE}")
-		//
-        script {IS_DEPLOY_STATUS = currentBuild.result == "SUCCESS"}
+	println("env.IS_DEPLOY_ENABLED: ${IS_DEPLOY_ENABLED}")
+	echo "Deploying to ${DEPLOY_ENV} on " + serverDir + " for: ${DEPLOY_URL_TO_LAUNCH}"
+	//
+	sendMaintenanceAlertHTML()
+	//
+	deployToRemoteShare(isRemoteDirASubDirToDeployTo, serverCfgName, serverDir,false,"${env.DEPLOY_DOTNET_SOURCE}")
+	//
+	script {IS_DEPLOY_STATUS = currentBuild.result == "SUCCESS"}
 }
 def deployToRemoteShare(isRemoteDirASubDirToDeployTo, serverCfgName, serverDir, isCleanRemote, srceFiles)
 {
@@ -309,16 +283,11 @@ def deployAppToEnvironment() {
 	{
 		println("Deploying with publishProfile")
 		println("currentBuild.currentResult.toBoolean()" + currentBuild.currentResult.toBoolean())
-
 		// sh returnStatus: true, script: "dotnet msbuild ${params.PRJ_CSPROJ_NAME}/${params.PRJ_CSPROJ_NAME}.csproj /p:DeployOnBuild=true /p:PublishProfile=${ENV:MSBUILD_PUBLISH_PROFILE_ENV}.pubxml /p:Password=%passVar% /p:VisualStudioVersion=${ENV:VisualStudioVersion}"
-
 		// sh returnStatus: true, script: "dotnet msbuild ${params.PRJ_CSPROJ_NAME}/${params.PRJ_CSPROJ_NAME}.csproj /p:DeployOnBuild=true /p:PublishProfile=${ENV:MSBUILD_PUBLISH_PROFILE_ENV}.pubxml /p:Password=%passVar% "
-
 		sh returnStatus: true, script: "dotnet msbuild ${params.PRJ_CSPROJ_NAME}/${params.PRJ_CSPROJ_NAME}.csproj /p:DeployOnBuild=true /p:PublishProfile=${ENV:MSBUILD_PUBLISH_PROFILE_ENV}.pubxml /p:Username=%userVar% /p:Password=%passVar%"
-
 		// dotnetBuild configuration: 'Release', project: "${params.PRJ_SOLUTION_NAME}.sln", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", verbosity: 'n', versionSuffix:"${env.BUILD_NUMBER}"
-
-	// dotnetBuild configuration: 'Release', project: "${params.PRJ_SOLUTION_NAME}.sln", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", verbosity: 'n', versionSuffix:"${env.BUILD_NUMBER}" version:'1.0.0'
+		// dotnetBuild configuration: 'Release', project: "${params.PRJ_SOLUTION_NAME}.sln", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", verbosity: 'n', versionSuffix:"${env.BUILD_NUMBER}" version:'1.0.0'
 	}
 
 	sleep(time: 8, unit: "SECONDS")
@@ -326,7 +295,7 @@ def deployAppToEnvironment() {
 
 def runCheckmarxScan(){
     // Cf. https://checkmarx.com/resource/documents/en/34965-8158-setting-up-scans-in-jenkins.html
-	// Use Jenkins Pipeline Syntax or Jenkin Snippet Generator .
+    // Use Jenkins Pipeline Syntax or Jenkin Snippet Generator .
     script {
         step([$class: 'CxScanBuilder',
 				avoidDuplicateProjectScans: true,
@@ -367,7 +336,6 @@ def runCheckmarxScan(){
 
     sendCheckmarkReportsToEmailDir()
     // publishHTML([allowMissing: true, alwaysLinkToLastBuild: true, keepAll: true, reportDir: "__config__\\email", reportFiles: 'Report_CxSAST.html', reportName: 'CheckmarxReport', reportTitles: ''])
-
     println("currentBuild.currentResult.toBoolean()" + currentBuild.currentResult.toBoolean())
 }
 
@@ -384,25 +352,18 @@ def runSonarScan(){
     script {
         withSonarQubeEnv(installationName:'SonarQubeServer')
         {
-			sh "${env.SONAR_HOME}\\SonarQube.Scanner.MSBuild.exe begin /k:{env.SONAR_PRJ_KEY}"
-			sh 'MSBuild.exe /t:Rebuild'
-			sh "${env.SONAR_HOME}\\SonarQube.Scanner.MSBuild.exe end"
-
-			// env.PATH = "$PATH:/home/jenkins/.dotnet"
-			// env.PATH = "$PATH:/home/jenkins/.dotnet/tools"
-			// sh "dotnet ${scannerHome}/SonarScanner.MSBuild.dll begin /k:\"sap_fehlertracking-db_AYIBDL0ZccYnbt4oP4o9\""
-			// sh "dotnet build fehlertracking.sln"
-			// sh "dotnet ${scannerHome}/SonarScanner.MSBuild.dll end"
-
-
-			// def SONAR_SCAN_STATUS = sh returnStatus: true, script:"""
-            // ${env.SONAR_HOME}/bin/sonar-scanner"""
-
-			def SONAR_SCAN_STATUS = sh returnStatus: true, script:"""
-            ${env.SONAR_HOME}\\SonarQube.Scanner.MSBuild.exe end"""
-
-
-            IS_SONAR_SCAN_STATUS = SONAR_SCAN_STATUS==0?true:false
+		sh "${env.SONAR_HOME}\\SonarQube.Scanner.MSBuild.exe begin /k:{env.SONAR_PRJ_KEY}"
+		sh 'MSBuild.exe /t:Rebuild'
+		sh "${env.SONAR_HOME}\\SonarQube.Scanner.MSBuild.exe end"
+		// env.PATH = "$PATH:/home/jenkins/.dotnet"
+		// env.PATH = "$PATH:/home/jenkins/.dotnet/tools"
+		// sh "dotnet ${scannerHome}/SonarScanner.MSBuild.dll begin /k:\"sap_fehlertracking-db_AYIBDL0ZccYnbt4oP4o9\""
+		// sh "dotnet build fehlertracking.sln"
+		// sh "dotnet ${scannerHome}/SonarScanner.MSBuild.dll end"
+		// def SONAR_SCAN_STATUS = sh returnStatus: true, script:"""
+                // ${env.SONAR_HOME}/bin/sonar-scanner"""
+		def SONAR_SCAN_STATUS = sh returnStatus: true, script:"""${env.SONAR_HOME}\\SonarQube.Scanner.MSBuild.exe end"""
+		IS_SONAR_SCAN_STATUS = SONAR_SCAN_STATUS==0?true:false
         }
     }
 }
@@ -519,24 +480,22 @@ pipeline {
         booleanParam(name: 'IS_TEST_INTEGRATION_ENABLED', defaultValue: false, description: '''Détermine si étape "Integration Test" est exécutée.Par défaut false''')
         booleanParam(name: 'IS_SONAR_SCAN_ENABLED', defaultValue: false, description: '''Détermine si étape "Sonar scan" est exécutée.Par défaut false''')
         booleanParam(name: 'IS_SONAR_QG_ENABLED', defaultValue: false, description: '''Détermine si étape "Sonar quality gate" est exécutée.Par défaut false''')
-		booleanParam(name: 'IS_SONAR_ENTERPRISE_EDITION', defaultValue: false, description: '''Détermine si sonarQube est la version enterprise.Par défaut false''')
-		booleanParam(name: 'IS_CHECKMARX_SCAN_ENABLED', defaultValue: false, description: '''Détermine si étape "checkmarx scan" est exécutée.Par défaut false''')
+	booleanParam(name: 'IS_SONAR_ENTERPRISE_EDITION', defaultValue: false, description: '''Détermine si sonarQube est la version enterprise.Par défaut false''')
+	booleanParam(name: 'IS_CHECKMARX_SCAN_ENABLED', defaultValue: false, description: '''Détermine si étape "checkmarx scan" est exécutée.Par défaut false''')
         booleanParam(name: 'IS_DEPLOY_ENABLED', defaultValue: false, description: '''Détermine si étape "Deploy" est exécutée.Par défaut false''')
     }
   environment {
     // --1.BRANCH SCAN BY JENKINS - TO CONFIGURE
-    // BRANCH_START_WTH ="CID_CONFIG/"
-    // BRANCH_START_WTH ="ci/"
     BRANCH_START_WTH ="<ci/branche_name>"
 
-  	// --2.PROJ - TO CONFIGURE
+    // --2.PROJ - TO CONFIGURE
     DEPLOY_CREDENTIALS_ID = "deploy-${DEPLOY_ENV}-credentials".toLowerCase()
     MSBUILD_PUBLISH_PROFILE_ENV = "${DEPLOY_ENV}Deploy"
     VisualStudioVersion = "<VisualStudioVersion> Ex:17.1.0.7609"
     DEPLOY_DOTNET_SOURCE ="${env.PRJ_CSPROJ_NAME}/bin/release/net${PRJ_TARGETED_FRAMEWORK}.0/publish/**"
     DEPLOY_CIFS_REMOVE_PREFIX ="${env.PRJ_CSPROJ_NAME}/bin/release/net${PRJ_TARGETED_FRAMEWORK}.0/publish/"
     DEPLOY_FILES_TO_EXCLUDE =""
-	DEPLOY_ITEMS_TO_EXCLUDE ="README.md,.git/**,.scannerwork/**,Checkmarx/**,__config__,__config__/**,.gitignore,sonar-project.properties,Jenkinsfile,DeployWebsite.zip"
+    DEPLOY_ITEMS_TO_EXCLUDE ="README.md,.git/**,.scannerwork/**,Checkmarx/**,__config__,__config__/**,.gitignore,sonar-project.properties,Jenkinsfile,DeployWebsite.zip"
 
     // --3. CHECKMARX - TO CONFIGURE
     CHECKMARX_URL = "http://checkmarx.[VOTRE_SOCIETE].fr"
@@ -554,15 +513,15 @@ pipeline {
 
     // --4.SONAR - TO CONFIGURE
     SONAR_USER = <SONAR_USER>
-	SONAR_PRJ_KEY = <PROJECT_KEY>
+    SONAR_PRJ_KEY = <PROJECT_KEY>
 
     // --5.TOOLS & URLS & SATES - NO CONFIG REQUIRED
-	REPORTGENERATOR_HOME_SHORT = "${JENKINS_HOME}/.dotnet/tools"
-	REPORTGENERATOR_HOME_LONG = "${JENKINS_HOME}/.dotnet/tools/.store/dotnet-reportgenerator-globaltool/5.1.9/dotnet-reportgenerator-globaltool/5.1.9/tools/net${PRJ_TARGETED_FRAMEWORK}.0/any"
-	POWERSHELL_HOME =tool name: 'DefaultLinux', type: 'hudson.plugins.powershell.PowerShellInstallation'
+    REPORTGENERATOR_HOME_SHORT = "${JENKINS_HOME}/.dotnet/tools"
+    REPORTGENERATOR_HOME_LONG = "${JENKINS_HOME}/.dotnet/tools/.store/dotnet-reportgenerator-globaltool/5.1.9/dotnet-reportgenerator-globaltool/5.1.9/tools/net${PRJ_TARGETED_FRAMEWORK}.0/any"
+    POWERSHELL_HOME =tool name: 'DefaultLinux', type: 'hudson.plugins.powershell.PowerShellInstallation'
     SONAR_HOME = tool 'SonarQubeScanner'
     NODEJS_HOME = "${tool 'NodeJS'}"
-	DOTNET_CLI_HOME = "${tool "dotnet${PRJ_TARGETED_FRAMEWORK}"}"
+    DOTNET_CLI_HOME = "${tool "dotnet${PRJ_TARGETED_FRAMEWORK}"}"
     JENKINS_HTTPS_URL = "https://jenkins.[VOTRE_SOCIETE].fr/"
     BUILD_URL = "${BUILD_URL}"
     SONAR_SERVER_URL = "https://jenkins.[VOTRE_SOCIETE].fr"
@@ -574,9 +533,9 @@ pipeline {
     IS_SONAR_SCAN_STATUS = false
     IS_DEPLOY_STATUS = false
     IS_CHECKMARX_SCAN_STATUS = false
-
+	  
     // --6.CUSTOM ENV PATH FOR JENKINS TOOLS - NO CONFIG REQUIRED
-	PATH ="${env.REPORTGENERATOR_HOME_SHORT}:${env.REPORTGENERATOR_HOME_LONG}:${env.NODEJS_HOME}/bin:${env.DOTNET_CLI_HOME}:${env.SONAR_HOME}/bin:${env.PATH}"
+    PATH ="${env.REPORTGENERATOR_HOME_SHORT}:${env.REPORTGENERATOR_HOME_LONG}:${env.NODEJS_HOME}/bin:${env.DOTNET_CLI_HOME}:${env.SONAR_HOME}/bin:${env.PATH}"
   }
   options {
     skipDefaultCheckout(true)
@@ -590,7 +549,7 @@ pipeline {
         steps {
              enableContentSecurityPolicyForReport()
              deleteDir()
-			 // cleanWs()
+	     // cleanWs()
         }
     }
     stage('Checkout') {
@@ -643,12 +602,12 @@ pipeline {
 		  // when {expression {IS_DEPLOY_ENABLED && (currentBuild.result == null || currentBuild.result == 'SUCCESS')&& env.BRANCH_NAME.startsWith("${env.BRANCH_START_WTH}")}}
 		  when {expression {IS_DEPLOY_ENABLED && env.BRANCH_NAME.startsWith("${env.BRANCH_START_WTH}")}}
 		  steps {
-				// With CIFS
-				deploy(false,env.DEPLOY_SERVER_NAME, env.DEPLOY_SERVER_DIR)
-				// With MSBuild
-				deployAppToEnvironment()
-			  }
-	  }
+			// With CIFS
+			deploy(false,env.DEPLOY_SERVER_NAME, env.DEPLOY_SERVER_DIR)
+			// With MSBuild
+			deployAppToEnvironment()
+		   }
+	   }
   }
   post {
     always {
