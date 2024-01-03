@@ -130,8 +130,6 @@ The function **`enableContentSecurityPolicyForReport()`** uses a script to set a
 
 - **`default-src 'self';`**: This restricts all content to come from the site's own origin (same origin). This includes JavaScript, CSS, images, media, frames, fonts, etc. This is a fallback setting that other fetch directives (like **`style-src`**) use.
     
-    
-
 - **`style-src 'self' 'unsafe-inline';`**: This allows styles (CSS) to be loaded from the site's own origin, and it also allows inline styles. The keyword **`'unsafe-inline'`** allows the use of inline resources, like style attribute in HTML tags (e.g., **`<div style="color: blue;">`**).
 
 In a nutshell, this function configures the CSP to allow the loading of resources from the same origin and the use of inline CSS styles, providing a layer of protection against certain types of attacks.
@@ -220,7 +218,7 @@ stage('Clean') {
 def cleanSolution() {
 	dotnetClean project: "${params.PRJ_SLN_NAME}.sln", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", verbosity: 'n'
 
-	// sh """#!/bin/bash
+    // sh """#!/bin/bash
     // ${DOTNET_CLI_HOME}\\dotnet clean ${WORKSPACE}\\${params.PRJ_SLN_NAME}.sln
     // """
 }
@@ -326,7 +324,6 @@ def installAndUseReportgeneratorGlobalTool() {
 	// $testFolderName = "$ENV:PRJ_CSPROJ_NAME.Tests"
 	// .\\__config__\\scripts\\ExecuteCodeCoverageInsidePipeline.ps1 -testFolderName $testFolderName
 	// '''
-
 	// Code Coverage + logger TestResults.xml
 	dotnetTest blame: true, collect: 'XPlat Code Coverage', configuration: 'Release', continueOnError: false, logger: 'trx;LogFileName=TestResults.trx', project: 'Tests.csproj', sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", unstableIfErrors: true, verbosity: 'n', workDirectory: 'Tests'
 
@@ -346,7 +343,7 @@ def setBeforeDeployStatus() {
 }
 def analyzeCodeCoverage() {
     // // sh returnStatus: true, script: """CodeCoverage analyze /output:TestResults\\TestResults.coverage TestResults\\TestResults.xml"""
-	sleep(time: 2, unit: "SECONDS")
+    sleep(time: 2, unit: "SECONDS")
 }
 ```
 
@@ -448,7 +445,6 @@ stage('Checkmarx Scan') {
   }
 }
 ```
-
 - The **`checkmarxScan()`** orchestrates the Checkmarx scan process. It first prints a start message to the console, then calls the **`runCheckmarxScan()`** function to perform the scan, and finally prints an end message to the console.
 - The **`post`** block contains operations that are performed after the steps in the stage have completed. The **`always`** directive means that the operations inside it will always be executed regardless of the outcome of the stage.
 - The **`checkmarxPostAlways()`** function is executed after the Checkmarx scan regardless of whether the scan succeeded or failed. This function could perform cleanup operations or analyze and report the results of the scan. This function is likely used in a **`post`** block after the **`steps`** in a stage in the pipeline. It sets the **`IS_DEPLOY_ENABLED`** variable based on the result of the current build.
@@ -467,7 +463,7 @@ def checkmarxPostAlways()
 }
 def runCheckmarxScan(){
     // Cf. https://checkmarx.com/resource/documents/en/34965-8158-setting-up-scans-in-jenkins.html
-	// Use Jenkins Pipeline Syntax or Jenkin Snippet Generator .
+    // Use Jenkins Pipeline Syntax or Jenkin Snippet Generator .
     script {
         step([$class: 'CxScanBuilder',
 				avoidDuplicateProjectScans: true,
@@ -563,22 +559,18 @@ def runSonarScan(){
     script {
         withSonarQubeEnv(installationName:'SonarQubeServer')
         {
-			sh "${env.SONAR_HOME}\\SonarQube.Scanner.MSBuild.exe begin /k:{env.SONAR_PRJ_KEY}"
-			sh 'MSBuild.exe /t:Rebuild'
-			sh "${env.SONAR_HOME}\\SonarQube.Scanner.MSBuild.exe end"
-
-			// env.PATH = "$PATH:/home/jenkins/.dotnet"
-			// env.PATH = "$PATH:/home/jenkins/.dotnet/tools"
-			// sh "dotnet ${scannerHome}/SonarScanner.MSBuild.dll begin /k:\"sap_fehlertracking-db_AYIBDL0ZccYnbt4oP4o9\""
-			// sh "dotnet build fehlertracking.sln"
-			// sh "dotnet ${scannerHome}/SonarScanner.MSBuild.dll end"
-
-			// def SONAR_SCAN_STATUS = sh returnStatus: true, script:"""
-            // ${env.SONAR_HOME}/bin/sonar-scanner"""
-
-			def SONAR_SCAN_STATUS = sh returnStatus: true, script:"""
-            ${env.SONAR_HOME}\\SonarQube.Scanner.MSBuild.exe end"""
-            IS_SONAR_SCAN_STATUS = SONAR_SCAN_STATUS==0?true:false
+		sh "${env.SONAR_HOME}\\SonarQube.Scanner.MSBuild.exe begin /k:{env.SONAR_PRJ_KEY}"
+		sh 'MSBuild.exe /t:Rebuild'
+		sh "${env.SONAR_HOME}\\SonarQube.Scanner.MSBuild.exe end"
+		// env.PATH = "$PATH:/home/jenkins/.dotnet"
+		// env.PATH = "$PATH:/home/jenkins/.dotnet/tools"
+		// sh "dotnet ${scannerHome}/SonarScanner.MSBuild.dll begin /k:\"sap_fehlertracking-db_AYIBDL0ZccYnbt4oP4o9\""
+		// sh "dotnet build fehlertracking.sln"
+		// sh "dotnet ${scannerHome}/SonarScanner.MSBuild.dll end"
+		// def SONAR_SCAN_STATUS = sh returnStatus: true, script:"""
+		// ${env.SONAR_HOME}/bin/sonar-scanner"""
+		def SONAR_SCAN_STATUS = sh returnStatus: true, script:"""${env.SONAR_HOME}\\SonarQube.Scanner.MSBuild.exe end"""
+		IS_SONAR_SCAN_STATUS = SONAR_SCAN_STATUS==0?true:false
         }
     }
 }
@@ -648,9 +640,8 @@ def publishSolutionHtmlAndCodeCoverage() {
 
 def publishSolution() {
 	// sh """#!/bin/bash
-    // dotnet publish {params.PRJ_CSPROJ_NAME}/${params.PRJ_CSPROJ_NAME}.csproj --configuration Release
+        // dotnet publish {params.PRJ_CSPROJ_NAME}/${params.PRJ_CSPROJ_NAME}.csproj --configuration Release
 	// """
-
 	dotnetPublish configuration: 'Release', project: "${params.PRJ_CSPROJ_NAME}.csproj", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", selfContained: false, workDirectory: "${params.PRJ_CSPROJ_NAME}"
 }
 def publishXunitAndHtmlReport() {
@@ -703,11 +694,11 @@ stage('Deploy') {
 def deploy(isRemoteDirASubDirToDeployTo, serverCfgName, serverDir){
         println("env.IS_DEPLOY_ENABLED: ${IS_DEPLOY_ENABLED}")
         echo "Deploying to ${DEPLOY_ENV} on " + serverDir + " for: ${DEPLOY_URL_TO_LAUNCH}"
-		//
-		sendMaintenanceAlertHTML()
-		//
+	//
+	sendMaintenanceAlertHTML()
+	//
         deployToRemoteShare(isRemoteDirASubDirToDeployTo, serverCfgName, serverDir,false,"${env.DEPLOY_DOTNET_SOURCE}")
-		//
+	//
         script {IS_DEPLOY_STATUS = currentBuild.result == "SUCCESS"}
 }
 def sendMaintenanceAlertHTML() {
@@ -774,16 +765,11 @@ def deployAppToEnvironment() {
 	{
 		println("Deploying with publishProfile")
 		println("currentBuild.currentResult.toBoolean()" + currentBuild.currentResult.toBoolean())
-
 		// sh returnStatus: true, script: "dotnet msbuild ${params.PRJ_CSPROJ_NAME}/${params.PRJ_CSPROJ_NAME}.csproj /p:DeployOnBuild=true /p:PublishProfile=${ENV:MSBUILD_PUBLISH_PROFILE_ENV}.pubxml /p:Password=%passVar% /p:VisualStudioVersion=${ENV:VisualStudioVersion}"
-
 		// sh returnStatus: true, script: "dotnet msbuild ${params.PRJ_CSPROJ_NAME}/${params.PRJ_CSPROJ_NAME}.csproj /p:DeployOnBuild=true /p:PublishProfile=${ENV:MSBUILD_PUBLISH_PROFILE_ENV}.pubxml /p:Password=%passVar% "
-
 		sh returnStatus: true, script: "dotnet msbuild ${params.PRJ_CSPROJ_NAME}/${params.PRJ_CSPROJ_NAME}.csproj /p:DeployOnBuild=true /p:PublishProfile=${ENV:MSBUILD_PUBLISH_PROFILE_ENV}.pubxml /p:Username=%userVar% /p:Password=%passVar%"
-
 		// dotnetBuild configuration: 'Release', project: "${params.PRJ_SOLUTION_NAME}.sln", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", verbosity: 'n', versionSuffix:"${env.BUILD_NUMBER}"
-
-	// dotnetBuild configuration: 'Release', project: "${params.PRJ_SOLUTION_NAME}.sln", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", verbosity: 'n', versionSuffix:"${env.BUILD_NUMBER}" version:'1.0.0'
+		// dotnetBuild configuration: 'Release', project: "${params.PRJ_SOLUTION_NAME}.sln", sdk: "dotnet${PRJ_TARGETED_FRAMEWORK}", verbosity: 'n', versionSuffix:"${env.BUILD_NUMBER}" version:'1.0.0'
 	}
 
 	sleep(time: 8, unit: "SECONDS")
@@ -833,7 +819,7 @@ def chooseEmailTemplate(String emailTemplatePath) {
 }
 def emailTemplate(params) {
     script{
-		// def emailTemplatePath= chooseEmailTemplate();
+	// def emailTemplatePath= chooseEmailTemplate();
         // def emailTemplatePath="__config__/email/jenkins_checkmarx_sonarqube_full_deploy-email.templatee.html"
         // def emailTemplatePath="__config__/email/jenkins_sonarqube_deploy.template.html"
         def emailTemplatePath="__config__/email/jenkins_checkmarx_deploy-email.template.html"
@@ -958,19 +944,12 @@ def zipWebsite(archiveName,filesToExclude) {
 ```
 
 These functions in your Jenkinsfile are mainly for sending notification emails and creating zip archives of your project artifacts. Here's a breakdown:
-
 **1. `chooseEmailTemplate(String emailTemplatePath)`:** This function chooses the email template based on the project configurations. If SonarQube and Checkmarx scans are enabled, it will select a specific template. If only SonarQube is enabled, it will select a different template. Otherwise, it will select the default template. The selected template path is returned.
-
 **2. `emailTemplate(params)`:** This function reads the selected email template, applies the provided parameters to it, and returns the resulting string. If the template file doesn't exist, it returns an error message. It uses the Groovy's **`StreamingTemplateEngine`** for template processing.
-
 **3. `notifyByMail()`:** This function sends an email notification about the build result. It constructs the email subject, body, and recipient list, and then calls the **`emailext`** function (from the Email Extension Plugin) to send the email. It also creates a Jenkins view for the email result using **`createJenkinsViewEmailResultReport()`** function.
-
 **4. `createJenkinsViewEmailResultReport(String emailBody,String emailSubject, isLogAttached)`:** This function creates an HTML view of the email that was sent. It writes the content to a HTML file and then publishes it using the **`publishHTML`** function.
-
 **5. `getDirAllFileName(attachFilesDir, isLogAttached)`:** This function returns all file names in the given directory that have specific extensions.
-
 **6. `createZipArtifacts()`:** This function creates zip archives of your project's artifacts. It uses the **`zip`** function to create the zip files. After creating the zip files, it cleans up unneeded directories.
-
 **7. `zipWebsite(archiveName,filesToExclude)`:** This function creates a zip archive of your entire workspace, excluding the files that match the **`filesToExclude`** pattern.
 
 **Note** : `These functions depend on your Jenkins plugins and the structure of your project. If you encounter any issues, ensure that you have the necessary plugins installed and check your project structure.`
@@ -978,7 +957,6 @@ These functions in your Jenkinsfile are mainly for sending notification emails a
 **SUMMARY**
 
  The main components of your Jenkins pipeline based on the stages we've discussed:
-
 1. **Init**: This stage prepares the workspace for the pipeline. It sets up content security policies and cleans the workspace directory.
 2. **Checkout**: This stage checks out the source code from the source control manager (SCM) to the Jenkins workspace.
 3. **Restore**: This stage restores the dependencies for your .NET solution.
