@@ -1,0 +1,220 @@
+{
+  "$schema": "https://bendera.github.io/vscode-commit-message-editor/schemas/config-v1.schema.json",
+  "configVersion": "1",
+  "staticTemplate": [
+    "<type>(<scope>): <short summary>",
+    "",
+    "<body>",
+    "",
+    " BREAKING CHANGE: <breaking change summary>",
+    "",
+    " <breaking change description + migration instructions>",
+    "",
+    "",
+    " Fixes #<issue number>"
+  ],
+  "dynamicTemplate": [
+    "{type}{scope} {description}",
+    "",
+    "{body}",
+    "{breaking_change_summary}",
+    "{breaking_change_body}",
+    "{fixes_issue_number}",
+    "",
+    "{footer}"
+  ],
+  "tokens": [
+    {
+      "label": "Type",
+      "name": "type",
+      "type": "enum",
+      "options": [
+        {
+          "label": "---",
+          "value": ""
+        },
+        {
+          "label": "build",
+          "description": "Changes that affect the build system or external dependencies (example scopes: gulp, broccoli, npm)"
+        },
+        {
+          "label": "chore",
+          "description": "Updating grunt tasks etc; no production code change"
+        },
+        {
+          "label": "ci",
+          "description": "Changes to our CI configuration files and scripts (example scopes: Travis, Circle, BrowserStack, SauceLabs)"
+        },
+        {
+          "label": "docs",
+          "description": "Documentation only changes"
+        },
+        {
+          "label": "feat",
+          "description": "A new feature"
+        },
+        {
+          "label": "fix",
+          "description": "A bug fix"
+        },
+        {
+          "label": "perf",
+          "description": "A code change that improves performance"
+        },
+        {
+          "label": "refactor",
+          "description": "A code change that neither fixes a bug nor adds a feature"
+        },
+        {
+          "label": "revert"
+        },
+        {
+          "label": "style",
+          "description": "Changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc)"
+        },
+        {
+          "label": "test",
+          "description": "Adding missing tests or correcting existing tests"
+        }
+      ],
+      "description": "Type of changes"
+    },
+    {
+      "label": "Scope",
+      "name": "scope",
+      "type": "enum",
+      "description": "A scope may be provided to a commit’s type, to provide additional contextual information and is contained within parenthesis, e.g., \"feat(parser): add ability to parse arrays\".",
+      "prefix": "(",
+      "suffix": ")",
+      "combobox": true,
+      "options": [
+        {
+          "label": "scope",
+          "value": "<scope>",
+          "description": "<scope>"
+        },
+        {
+          "label": "parser",
+          "value": "parser",
+          "description": "parser"
+        },
+        {
+          "label": "init",
+          "value": "init",
+          "description": " Initialize commit"
+        },
+        {
+          "label": "security",
+          "value": "security",
+          "description": "Security to invite users to upgrade in case of vulnerabilities"
+        },
+        {
+          "label": "deps",
+          "value": "deps",
+          "description": "Dependencies upgrading or downgrading"
+        },
+        {
+          "label": "config",
+          "value": "config",
+          "description": " Configuration changes"
+        },
+        {
+          "label": "i18n",
+          "value": "i18n",
+          "description": "Internationalization and localization"
+        },
+        {
+          "label": "forms",
+          "value": "forms",
+          "description": "forms"
+        },
+        {
+          "label": "devtools",
+          "value": "devtools",
+          "description": "devtools"
+        },
+        {
+          "label": "core",
+          "value": "core",
+          "description": "core"
+        },
+        {
+          "label": "tooling",
+          "value": "tooling",
+          "description": "tooling"
+        },
+        {
+          "label": "dev-infra",
+          "value": "dev-infra",
+          "description": "dev-infra"
+        },
+        {
+          "label": "update",
+          "value": "update",
+          "description": "update"
+        },
+        {
+          "label": "upgrade",
+          "value": "upgrade",
+          "description": "upgrade"
+        },
+        {
+          "label": "animations",
+          "value": "animations",
+          "description": "animations"
+        }
+      ]
+    },
+    {
+      "label": "Short description",
+      "name": "description",
+      "type": "text",
+      "description": "Short description in the subject line.",
+      "prefix": ": "
+    },
+    {
+      "label": "Body",
+      "name": "body",
+      "type": "text",
+      "description": "Mandatory. Except for scope \"docs\". \nMinimum 20 characters.",
+      "maxLines": 10,
+      "multiline": true,
+      "lines": 5
+    },
+    {
+      "label": "Breaking change?",
+      "name": "breaking_change_summary",
+      "type": "text",
+      "description": "Breaking change summary",
+      "prefix": "\n\nBREAKING CHANGE:  ",
+      "maxLength": 100
+    },
+    {
+      "label": "Breaking change body(breaking change ?)",
+      "name": "breaking_change_body",
+      "type": "text",
+      "value": "Fixes #<issue number>",
+      "description": "breaking change description + migration instructions",
+      "prefix": "\n\n",
+      "maxLines": 10,
+      "multiline": true,
+      "lines": 5
+    },
+    {
+      "label": "Fixes issue number",
+      "name": "fixes_issue_number",
+      "type": "text",
+      "description": "<fixes issue number>",
+      "prefix": " \n  \nFixes #"
+    },
+    {
+      "label": "Footer",
+      "name": "footer",
+      "type": "text",
+      "description": "Optional Footer",
+      "maxLines": 6,
+      "multiline": true,
+      "lines": 4
+    }
+  ]
+}
